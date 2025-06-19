@@ -4,17 +4,18 @@ import plotly.graph_objects as go
 import plotly.express as px
 
 # Streamlit app layout
-st.title("Interactive Single Pendulum Simulation")
+st.title("Interactive Single Pendulum Simulation with Dynamic Length")
 
 # Sidebar for user inputs
 st.sidebar.header("Pendulum Parameters")
-L = st.sidebar.slider("Pendulum Length (m)", 0.1, 2.0, 1.0, 0.1)
+L_start = st.sidebar.slider("Start Length (m)", 0.1, 2.0, 1.0, 0.1)
+L_end = st.sidebar.slider("End Length (m)", 0.1, 2.0, 1.5, 0.1)
 theta0 = st.sidebar.slider("Initial Angle (degrees)", 0, 90, 45, 5)
-t_max = st.sidebar.slider("Simulation Time (s)", 5.0, 20.0, 10.0, 1.0)
-dt = 0.01  # Fixed time step for simplicity
+t_max = st.sidebar.slider("Total Simulation Time (s)", 5.0, 20.0, 10.0, 1.0)
+dt = 0.01  # Fixed time step for numerical stability
 
 # Pendulum simulation function
-def simulate_pendulum(L, theta0, t_max, dt):
+def simulate_pendulum(L_start, L_end, theta0, t_max, dt):
     g = 9.81  # Gravitational acceleration (m/s^2)
     theta0_rad = np.radians(theta0)  # Convert initial angle to radians
     omega0 = 0.0  # Initial angular velocity (rad/s)
@@ -23,15 +24,18 @@ def simulate_pendulum(L, theta0, t_max, dt):
     t = np.arange(0, t_max, dt)
     n = len(t)
     
+    # Linearly varying length
+    L = L_start + (L_end - L_start) * t / t_max
+    
     # Arrays for angular displacement and velocity
     theta = np.zeros(n)
     omega = np.zeros(n)
     theta[0] = theta0_rad
     omega[0] = omega0
     
-    # Euler method integration
+    # Euler method integration with variable length
     for i in range(n - 1):
-        alpha = -(g / L) * np.sin(theta[i])  # Angular acceleration
+        alpha = -(g / L[i]) * np.sin(theta[i])  # Angular acceleration
         omega[i + 1] = omega[i] + alpha * dt
         theta[i + 1] = theta[i] + omega[i + 1] * dt
     
@@ -39,16 +43,42 @@ def simulate_pendulum(L, theta0, t_max, dt):
     x = L * np.sin(theta)
     y = -L * np.cos(theta)
     
-    return t, np.degrees(theta), x, y
+    # Oscillation analysis
+    crossings = np.where(np.diff(np.sign(theta)))[0]
+    num_oscillations = len(crossings) // 2
+    if num_oscillations > 0:
+        periods = np.diff(t[crossings])
+        avg_period = np.mean(periods)
+    else:
+        avg_period = np.nan
+    
+    return t, np.degrees(theta), x, y, num_oscillations, avg_period, L
 
 # Run simulation when button is clicked
 if st.button("Run Simulation"):
     # Simulate pendulum
-    t, theta_deg, x, y = simulate_pendulum(L, theta0, t_max, dt)
+    t, theta_deg, x, y, num_oscillations, avg_period, L = simulate_pendulum(L_start, L_end, theta0, t_max, dt)
     
-    # Plot 1: Angular displacement vs time
+    # Plot 1: Angular displacement vs time with analysis
     fig1 = px.line(x=t, y=theta_deg, labels={"x": "Time (s)", "y": "Angular Displacement (degrees)"})
-    fig1.update_layout(title="Pendulum Angle over Time", showlegend=False)
+    fig1.update_layout(
+        title="Pendulum Angle over Time",
+        showlegend=False,
+        annotations=[
+            dict(
+                x=0.05,
+                y=0.95,
+                xref="paper",
+                yref="paper",
+                text=f"Oscillations: {num_oscillations}<br>Avg Period: {avg_period:.2f} s<br>Final Length: {L[-1]:.2f} m",
+                showarrow=False,
+                bgcolor="white",
+                bordercolor="gray",
+                borderwidth=1,
+                align="left"
+            )
+        ]
+    )
     fig1.update_traces(line_color="blue")
     st.plotly_chart(fig1, use_container_width=True)
     
@@ -60,8 +90,8 @@ if st.button("Run Simulation"):
         title="Pendulum Trajectory",
         xaxis_title="x (m)",
         yaxis_title="y (m)",
-        xaxis=dict(range=[-L - 0.1, L + 0.1], scaleanchor="y", scaleratio=1),
-        yaxis=dict(range=[-L - 0.1, 0.1]),
+        xaxis=dict(range=[-max(L) - 0.1, max(L) + 0.1], scaleanchor="y", scaleratio=1),
+        yaxis=dict(range=[-max(L) - 0.1, 0.1]),
         showlegend=True
     )
     st.plotly_chart(fig2, use_container_width=True)
@@ -87,8 +117,8 @@ if st.button("Run Simulation"):
         title="Pendulum Animation",
         xaxis_title="x (m)",
         yaxis_title="y (m)",
-        xaxis=dict(range=[-L - 0.1, L + 0.1], scaleanchor="y", scaleratio=1),
-        yaxis=dict(range=[-L - 0.1, 0.1]),
+        xaxis=dict(range=[-max(L) - 0.1, max(L) + 0.1], scaleanchor="y", scaleratio=1),
+        yaxis=dict(range=[-max(L) - 0.1, 0.1]),
         showlegend=False,
         updatemenus=[{
             "buttons": [
