@@ -1,100 +1,101 @@
 import streamlit as st
 import numpy as np
-from scipy.integrate import odeint
 import plotly.graph_objects as go
+import plotly.express as px
 
-# Define the differential equations for the double pendulum
-def double_pendulum_deriv(state, t, m1, m2, l1, l2, g):
-    """
-    Compute the derivatives of the double pendulum system.
-    state: [theta1, omega1, theta2, omega2] (angles and angular velocities)
-    t: time
-    m1, m2: masses of the pendulums
-    l1, l2: lengths of the pendulums
-    g: gravitational acceleration
-    """
-    theta1, omega1, theta2, omega2 = state
-    c, s = np.cos(theta1 - theta2), np.sin(theta1 - theta2)
+# Streamlit app layout
+st.title("Interactive Single Pendulum Simulation")
+
+# Sidebar for user inputs
+st.sidebar.header("Pendulum Parameters")
+L = st.sidebar.slider("Pendulum Length (m)", 0.1, 2.0, 1.0, 0.1)
+theta0 = st.sidebar.slider("Initial Angle (degrees)", 0, 90, 45, 5)
+t_max = st.sidebar.slider("Simulation Time (s)", 5.0, 20.0, 10.0, 1.0)
+dt = 0.01  # Fixed time step for simplicity
+
+# Pendulum simulation function
+def simulate_pendulum(L, theta0, t_max, dt):
+    g = 9.81  # Gravitational acceleration (m/s^2)
+    theta0_rad = np.radians(theta0)  # Convert initial angle to radians
+    omega0 = 0.0  # Initial angular velocity (rad/s)
     
-    denominator = (2 * m1 + m2 - m2 * c**2)
-    dtheta1 = omega1
-    domega1 = (-g * (2 * m1 + m2) * np.sin(theta1) - m2 * g * np.sin(theta1 - 2 * theta2) - 
-               2 * s * m2 * (omega2**2 * l2 + omega1**2 * l1 * c)) / (l1 * denominator)
-    dtheta2 = omega2
-    domega2 = (2 * s * (omega1**2 * l1 * (m1 + m2) + g * (m1 + m2) * np.cos(theta1) + 
-                        omega2**2 * l2 * m2 * c)) / (l2 * denominator)
+    # Time array
+    t = np.arange(0, t_max, dt)
+    n = len(t)
     
-    return [dtheta1, domega1, dtheta2, domega2]
+    # Arrays for angular displacement and velocity
+    theta = np.zeros(n)
+    omega = np.zeros(n)
+    theta[0] = theta0_rad
+    omega[0] = omega0
+    
+    # Euler method integration
+    for i in range(n - 1):
+        alpha = -(g / L) * np.sin(theta[i])  # Angular acceleration
+        omega[i + 1] = omega[i] + alpha * dt
+        theta[i + 1] = theta[i] + omega[i + 1] * dt
+    
+    # Convert to Cartesian coordinates
+    x = L * np.sin(theta)
+    y = -L * np.cos(theta)
+    
+    return t, np.degrees(theta), x, y
 
-# Set up the Streamlit app
-st.title("Interactive Double Pendulum Simulation")
-
-# Sidebar for parameter inputs
-st.sidebar.header("Parameters")
-l1 = st.sidebar.slider("Length 1 (m)", 0.1, 2.0, 1.0, 0.1)
-l2 = st.sidebar.slider("Length 2 (m)", 0.1, 2.0, 1.0, 0.1)
-m1 = st.sidebar.slider("Mass 1 (kg)", 0.1, 2.0, 1.0, 0.1)
-m2 = st.sidebar.slider("Mass 2 (kg)", 0.1, 2.0, 1.0, 0.1)
-theta1_init = st.sidebar.slider("Initial Angle 1 (deg)", -90, 90, 45, 5)
-theta2_init = st.sidebar.slider("Initial Angle 2 (deg)", -90, 90, 0, 5)
-t_max = st.sidebar.slider("Simulation Time (s)", 5, 30, 10, 1)
-dt = 0.01  # Time step for simulation
-
-# Convert initial angles from degrees to radians
-theta1_init_rad = np.radians(theta1_init)
-theta2_init_rad = np.radians(theta2_init)
-
-# Initial state: [theta1, omega1, theta2, omega2]
-state0 = [theta1_init_rad, 0, theta2_init_rad, 0]
-
-# Time array for the simulation
-t = np.arange(0, t_max, dt)
-
-# Button to trigger the simulation
+# Run simulation when button is clicked
 if st.button("Run Simulation"):
-    # Solve the differential equations
-    solution = odeint(double_pendulum_deriv, state0, t, args=(m1, m2, l1, l2, 9.81))
-    theta1, theta2 = solution[:, 0], solution[:, 2]
+    # Simulate pendulum
+    t, theta_deg, x, y = simulate_pendulum(L, theta0, t_max, dt)
     
-    # Compute Cartesian coordinates of the pendulum bobs
-    x1 = l1 * np.sin(theta1)
-    y1 = -l1 * np.cos(theta1)
-    x2 = x1 + l2 * np.sin(theta2)
-    y2 = y1 - l2 * np.cos(theta2)
+    # Plot 1: Angular displacement vs time
+    fig1 = px.line(x=t, y=theta_deg, labels={"x": "Time (s)", "y": "Angular Displacement (degrees)"})
+    fig1.update_layout(title="Pendulum Angle over Time", showlegend=False)
+    fig1.update_traces(line_color="blue")
+    st.plotly_chart(fig1, use_container_width=True)
     
-    # Create the Plotly figure
-    fig = go.Figure()
+    # Plot 2: Pendulum trajectory
+    fig2 = go.Figure()
+    fig2.add_trace(go.Scatter(x=x, y=y, mode="lines", name="Trajectory", line=dict(color="blue")))
+    fig2.add_trace(go.Scatter(x=[0], y=[0], mode="markers", name="Pivot", marker=dict(size=10, color="black")))
+    fig2.update_layout(
+        title="Pendulum Trajectory",
+        xaxis_title="x (m)",
+        yaxis_title="y (m)",
+        xaxis_range=[-L - 0.1, L + 0.1],
+        yaxis_range=[-L - 0.1, 0.1],
+        showlegend=True,
+        aspectratio=dict(x=1, y=1)
+    )
+    st.plotly_chart(fig2, use_container_width=True)
     
-    # Initial frame (t=0)
-    fig.add_trace(go.Scatter(
-        x=[0, x1[0], x2[0]], 
-        y=[0, y1[0], y2[0]], 
-        mode='lines+markers', 
-        name='Pendulum',
-        line=dict(color='blue'),
+    # Animation: Pendulum motion
+    fig3 = go.Figure()
+    # Initial frame
+    fig3.add_trace(go.Scatter(
+        x=[0, x[0]], y=[0, y[0]],
+        mode="lines+markers",
+        name="Pendulum",
+        line=dict(color="blue", width=2),
         marker=dict(size=10)
     ))
-    
     # Animation frames (decimated for performance)
     frames = [go.Frame(data=[go.Scatter(
-        x=[0, x1[k], x2[k]], 
-        y=[0, y1[k], y2[k]], 
-        mode='lines+markers'
+        x=[0, x[k]], y=[0, y[k]],
+        mode="lines+markers"
     )]) for k in range(0, len(t), 5)]
-    fig.frames = frames
-    
-    # Update layout with animation controls
-    fig.update_layout(
-        xaxis_range=[-(l1 + l2) - 0.1, (l1 + l2) + 0.1],
-        yaxis_range=[-(l1 + l2) - 0.1, 0.1],
-        title="Double Pendulum Simulation",
-        xaxis_title="X Position (m)",
-        yaxis_title="Y Position (m)",
+    fig3.frames = frames
+    # Layout with animation controls
+    fig3.update_layout(
+        title="Pendulum Animation",
+        xaxis_title="x (m)",
+        yaxis_title="y (m)",
+        xaxis_range=[-L - 0.1, L + 0.1],
+        yaxis_range=[-L - 0.1, 0.1],
+        showlegend=False,
         updatemenus=[{
             "buttons": [
                 {"args": [None, {"frame": {"duration": 50, "redraw": True}, "fromcurrent": True}],
                  "label": "Play", "method": "animate"},
-                {"args": [[None], {"frame": {"duration": 0, "redraw": False}, "mode": "immediate", "transition": {"duration": 0}}],
+                {"args": [[None], {"frame": {"duration": 0, "redraw": False}, "mode": "immediate"}],
                  "label": "Pause", "method": "animate"}
             ],
             "direction": "left",
@@ -105,8 +106,7 @@ if st.button("Run Simulation"):
             "xanchor": "right",
             "y": 0,
             "yanchor": "top"
-        }]
+        }],
+        aspectratio=dict(x=1, y=1)
     )
-    
-    # Display the animated plot
-    st.plotly_chart(fig)
+    st.plotly_chart(fig3, use_container_width=True)
