@@ -60,10 +60,9 @@ if st.button("Run Simulation"):
         title="Pendulum Trajectory",
         xaxis_title="x (m)",
         yaxis_title="y (m)",
-        xaxis_range=[-L - 0.1, L + 0.1],
-        yaxis_range=[-L - 0.1, 0.1],
-        showlegend=True,
-        aspectratio=dict(x=1, y=1)
+        xaxis=dict(range=[-L - 0.1, L + 0.1], scaleanchor="y", scaleratio=1),
+        yaxis=dict(range=[-L - 0.1, 0.1]),
+        showlegend=True
     )
     st.plotly_chart(fig2, use_container_width=True)
     
@@ -88,8 +87,8 @@ if st.button("Run Simulation"):
         title="Pendulum Animation",
         xaxis_title="x (m)",
         yaxis_title="y (m)",
-        xaxis_range=[-L - 0.1, L + 0.1],
-        yaxis_range=[-L - 0.1, 0.1],
+        xaxis=dict(range=[-L - 0.1, L + 0.1], scaleanchor="y", scaleratio=1),
+        yaxis=dict(range=[-L - 0.1, 0.1]),
         showlegend=False,
         updatemenus=[{
             "buttons": [
@@ -106,7 +105,6 @@ if st.button("Run Simulation"):
             "xanchor": "right",
             "y": 0,
             "yanchor": "top"
-        }],
-        aspectratio=dict(x=1, y=1)
+        }]
     )
     st.plotly_chart(fig3, use_container_width=True)
