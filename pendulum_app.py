@@ -4,44 +4,44 @@ import plotly.graph_objects as go
 import plotly.express as px
 
 # Streamlit app layout
-st.title("Interactive Single Pendulum Simulation with Dynamic Length")
+st.title("Interactive Pendulum Simulation")
 
 # Sidebar for user inputs
 st.sidebar.header("Pendulum Parameters")
-L_start = st.sidebar.slider("Start Length (m)", 0.1, 2.0, 1.0, 0.1)
-L_end = st.sidebar.slider("End Length (m)", 0.1, 2.0, 1.5, 0.1)
+length_type = st.sidebar.radio("Length Type", ["Fixed", "Dynamic"])
+
+if length_type == "Fixed":
+    length_cm = st.sidebar.selectbox("Select pendulum length (cm)", options=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    L = length_cm / 100.0  # Convert cm to meters
+    st.sidebar.write(f"Selected length: {length_cm} cm ({L:.2f} m)")
+else:
+    L_start = st.sidebar.slider("Start Length (m)", 0.1, 2.0, 1.0, 0.1)
+    L_end = st.sidebar.slider("End Length (m)", 0.1, 2.0, 1.5, 0.1)
+
 theta0 = st.sidebar.slider("Initial Angle (degrees)", 0, 90, 45, 5)
 t_max = st.sidebar.slider("Total Simulation Time (s)", 5.0, 20.0, 10.0, 1.0)
-dt = 0.01  # Fixed time step for numerical stability
+dt = 0.01  # Fixed time step
 
 # Pendulum simulation function
-def simulate_pendulum(L_start, L_end, theta0, t_max, dt):
+def simulate_pendulum(L_array, theta0, t):
     g = 9.81  # Gravitational acceleration (m/s^2)
-    theta0_rad = np.radians(theta0)  # Convert initial angle to radians
-    omega0 = 0.0  # Initial angular velocity (rad/s)
-    
-    # Time array
-    t = np.arange(0, t_max, dt)
+    theta0_rad = np.radians(theta0)
     n = len(t)
-    
-    # Linearly varying length
-    L = L_start + (L_end - L_start) * t / t_max
-    
-    # Arrays for angular displacement and velocity
+    dt = t[1] - t[0]
     theta = np.zeros(n)
     omega = np.zeros(n)
     theta[0] = theta0_rad
-    omega[0] = omega0
+    omega[0] = 0.0
     
-    # Euler method integration with variable length
+    # Euler method integration
     for i in range(n - 1):
-        alpha = -(g / L[i]) * np.sin(theta[i])  # Angular acceleration
+        alpha = -(g / L_array[i]) * np.sin(theta[i])
         omega[i + 1] = omega[i] + alpha * dt
         theta[i + 1] = theta[i] + omega[i + 1] * dt
     
-    # Convert to Cartesian coordinates
-    x = L * np.sin(theta)
-    y = -L * np.cos(theta)
+    theta_deg = np.degrees(theta)
+    x = L_array * np.sin(theta)
+    y = -L_array * np.cos(theta)
     
     # Oscillation analysis
     crossings = np.where(np.diff(np.sign(theta)))[0]
@@ -52,32 +52,33 @@ def simulate_pendulum(L_start, L_end, theta0, t_max, dt):
     else:
         avg_period = np.nan
     
-    return t, np.degrees(theta), x, y, num_oscillations, avg_period, L
+    return t, theta_deg, x, y, num_oscillations, avg_period, L_array
 
 # Run simulation when button is clicked
 if st.button("Run Simulation"):
-    # Simulate pendulum
-    t, theta_deg, x, y, num_oscillations, avg_period, L = simulate_pendulum(L_start, L_end, theta0, t_max, dt)
+    t = np.arange(0, t_max, dt)
+    if length_type == "Fixed":
+        L_array = np.full(len(t), L)
+    else:
+        L_array = L_start + (L_end - L_start) * t / t_max
     
-    # Plot 1: Angular displacement vs time with analysis
+    t, theta_deg, x, y, num_oscillations, avg_period, L_array = simulate_pendulum(L_array, theta0, t)
+    
+    # Analysis text
+    if length_type == "Fixed":
+        T_theory = 2 * np.pi * np.sqrt(L / 9.81)
+        analysis_text = f"Oscillations: {num_oscillations}<br>Avg Period: {avg_period:.2f} s<br>Theoretical Period: {T_theory:.2f} s"
+        title_suffix = f"Fixed Length: {L:.2f} m"
+    else:
+        analysis_text = f"Oscillations: {num_oscillations}<br>Avg Period: {avg_period:.2f} s"
+        title_suffix = f"Length varies from {L_start:.2f} to {L_end:.2f} m"
+    
+    # Plot 1: Angular displacement vs time
     fig1 = px.line(x=t, y=theta_deg, labels={"x": "Time (s)", "y": "Angular Displacement (degrees)"})
     fig1.update_layout(
-        title="Pendulum Angle over Time",
+        title=f"Pendulum Angle over Time ({title_suffix})",
         showlegend=False,
-        annotations=[
-            dict(
-                x=0.05,
-                y=0.95,
-                xref="paper",
-                yref="paper",
-                text=f"Oscillations: {num_oscillations}<br>Avg Period: {avg_period:.2f} s<br>Final Length: {L[-1]:.2f} m",
-                showarrow=False,
-                bgcolor="white",
-                bordercolor="gray",
-                borderwidth=1,
-                align="left"
-            )
-        ]
+        annotations=[dict(x=0.05, y=0.95, xref="paper", yref="paper", text=analysis_text, showarrow=False, bgcolor="white", bordercolor="gray", borderwidth=1, align="left")]
     )
     fig1.update_traces(line_color="blue")
     st.plotly_chart(fig1, use_container_width=True)
@@ -90,42 +91,28 @@ if st.button("Run Simulation"):
         title="Pendulum Trajectory",
         xaxis_title="x (m)",
         yaxis_title="y (m)",
-        xaxis=dict(range=[-max(L) - 0.1, max(L) + 0.1], scaleanchor="y", scaleratio=1),
-        yaxis=dict(range=[-max(L) - 0.1, 0.1]),
+        xaxis=dict(range=[-np.max(L_array) - 0.1, np.max(L_array) + 0.1], scaleanchor="y", scaleratio=1),
+        yaxis=dict(range=[-np.max(L_array) - 0.1, 0.1]),
         showlegend=True
     )
     st.plotly_chart(fig2, use_container_width=True)
     
     # Animation: Pendulum motion
     fig3 = go.Figure()
-    # Initial frame
-    fig3.add_trace(go.Scatter(
-        x=[0, x[0]], y=[0, y[0]],
-        mode="lines+markers",
-        name="Pendulum",
-        line=dict(color="blue", width=2),
-        marker=dict(size=10)
-    ))
-    # Animation frames (decimated for performance)
-    frames = [go.Frame(data=[go.Scatter(
-        x=[0, x[k]], y=[0, y[k]],
-        mode="lines+markers"
-    )]) for k in range(0, len(t), 5)]
+    fig3.add_trace(go.Scatter(x=[0, x[0]], y=[0, y[0]], mode="lines+markers", name="Pendulum", line=dict(color="blue", width=2), marker=dict(size=10)))
+    frames = [go.Frame(data=[go.Scatter(x=[0, x[k]], y=[0, y[k]], mode="lines+markers")]) for k in range(0, len(t), 5)]
     fig3.frames = frames
-    # Layout with animation controls
     fig3.update_layout(
         title="Pendulum Animation",
         xaxis_title="x (m)",
         yaxis_title="y (m)",
-        xaxis=dict(range=[-max(L) - 0.1, max(L) + 0.1], scaleanchor="y", scaleratio=1),
-        yaxis=dict(range=[-max(L) - 0.1, 0.1]),
+        xaxis=dict(range=[-np.max(L_array) - 0.1, np.max(L_array) + 0.1], scaleanchor="y", scaleratio=1),
+        yaxis=dict(range=[-np.max(L_array) - 0.1, 0.1]),
         showlegend=False,
         updatemenus=[{
             "buttons": [
-                {"args": [None, {"frame": {"duration": 50, "redraw": True}, "fromcurrent": True}],
-                 "label": "Play", "method": "animate"},
-                {"args": [[None], {"frame": {"duration": 0, "redraw": False}, "mode": "immediate"}],
-                 "label": "Pause", "method": "animate"}
+                {"args": [None, {"frame": {"duration": 50, "redraw": True}, "fromcurrent": True}], "label": "Play", "method": "animate"},
+                {"args": [[None], {"frame": {"duration": 0, "redraw": False}, "mode": "immediate"}], "label": "Pause", "method": "animate"}
             ],
             "direction": "left",
             "pad": {"r": 10, "t": 87},
